@@ -1,0 +1,196 @@
+# ==============================================================================
+# QuantumGuard - AI Learning Companion: Git Ignore Configurations
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Dependency Directories & Package Managers
+# ------------------------------------------------------------------------------
+node_modules/
+jspm_packages/
+.npm/
+.yarn/
+.pnpm-store/
+
+# ------------------------------------------------------------------------------
+# Build Artifacts & Output
+# ------------------------------------------------------------------------------
+dist/
+dist-ssr/
+build/
+out/
+.next/
+.nuxt/
+
+# ------------------------------------------------------------------------------
+# Environment Variables & Secrets (CRITICAL SECURITY)
+# ------------------------------------------------------------------------------
+.env
+.env.local
+.env.production
+.env.development
+.env.staging
+.env.*.local
+.env.test
+.git-credentials
+.netrc
+.pypirc
+secrets.json
+*.pem
+*.key
+*.cert
+
+# ------------------------------------------------------------------------------
+# Python & Virtual Environments (Django Backend)
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Envs
+.venv/
+venv/
+env/
+ENV/
+venv.bak/
+
+# ------------------------------------------------------------------------------
+# Databases & Backups
+# ------------------------------------------------------------------------------
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3.bak
+db.sqlite3
+db.sqlite3.bak
+db.sqlite3-journal
+*.db
+*.db-journal
+*.bak
+*.backup
+
+# ------------------------------------------------------------------------------
+# Django Media, Staticfiles & Logs
+# ------------------------------------------------------------------------------
+media/
+staticfiles/
+static/
+logs/
+*.log
+backend-server.log
+backend-server.err.log
+frontend-server.log
+frontend-server.err.log
+e2e_course_api.log
+vite-dev.log
+vite-dev.err.log
+vite-dev.out.log
+scratch_test.log
+test_run.log
+
+# ------------------------------------------------------------------------------
+# Temporary Files, Diagnostic Dumps, Scratch & Debug Scripts
+# ------------------------------------------------------------------------------
+*.tmp
+*.temp
+temp/
+tmp/
+py_check.txt
+test_output.txt
+test_output_direct.txt
+exam_diagnostics.txt
+pip_list.txt
+test_results.txt
+terminal;*
+
+# Root scratch/debug/utility scripts (not part of production codebase)
+push_to_github.py
+push_to_github.bat
+scratch_read.py
+scratch_run_migrations.py
+run_migration.py
+seed_db.py
+test_cloud_proctoring.py
+test_course_generation.py
+test_e2e_course_api.py
+test_proctoring_api.py
+test_youtube_gen.py
+
+# Backend scratch/debug scripts
+Exam Proactor/api_check.py
+Exam Proactor/check_db.py
+Exam Proactor/check_persistence.py
+Exam Proactor/check_state.py
+Exam Proactor/check_users.py
+Exam Proactor/check_users_v2.py
+Exam Proactor/cleanup_student_attempts.py
+Exam Proactor/debug_submission.py
+Exam Proactor/diagnostics.py
+Exam Proactor/finalize_exam_11.py
+Exam Proactor/gemini_verify.py
+Exam Proactor/list_all.py
+Exam Proactor/list_violations.py
+Exam Proactor/run_tests.py
+Exam Proactor/scratch_run_migrations.py
+Exam Proactor/scratch_run_tests.py
+Exam Proactor/scratch_test.log
+Exam Proactor/seed_exam_11.py
+Exam Proactor/seed_exams.py
+Exam Proactor/seed_final.py
+Exam Proactor/seed_new.py
+Exam Proactor/seed_test_reports.py
+Exam Proactor/setup_users.py
+Exam Proactor/test_full_system.py
+Exam Proactor/test_results.txt
+Exam Proactor/test_run.log
+Exam Proactor/test_simple.py
+Exam Proactor/test_snapshot_save.py
+Exam Proactor/test_violation_save.py
+Exam Proactor/test_youtube_gen_local.py
+Exam Proactor/update_users.py
+Exam Proactor/verify_reports.py
+Exam Proactor/verify_storage.py
+Exam Proactor/exam_diagnostics.txt
+Exam Proactor/pip_list.txt
+
+# Coverage & Test
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ------------------------------------------------------------------------------
+# IDE, Editor & OS Configuration
+# ------------------------------------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ------------------------------------------------------------------------------
+# AI Agent & Framework (MUST EXCLUDE)
+# ------------------------------------------------------------------------------
+.agent/
+.gemini/

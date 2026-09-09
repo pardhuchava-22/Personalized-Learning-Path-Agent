@@ -1,0 +1,7 @@
+{
+  "name": "QuantumGuard",
+  "description": "A sophisticated AI-Powered Learning Companion platform featuring a premium design system.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

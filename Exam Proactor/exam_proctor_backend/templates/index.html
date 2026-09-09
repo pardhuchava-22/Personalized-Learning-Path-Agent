@@ -1,0 +1,757 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Proctoring System</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <!-- TensorFlow.js, COCO-SSD, face-api, and BlazeFace for detection -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="navbar-brand">
+                <h1>📋 Exam Proctoring System</h1>
+            </div>
+            <div class="navbar-menu">
+                <button id="navHome" class="nav-btn active">Home</button>
+                <button id="navExams" class="nav-btn">Exams</button>
+                <button id="navProfile" class="nav-btn">Profile</button>
+                <button id="navLogout" class="nav-btn logout-btn">Logout</button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Home Page -->
+            <div id="homePage" class="page">
+                <div class="welcome-section">
+                    <div class="welcome-card">
+                        <h2>Welcome to Exam Proctoring Pro</h2>
+                        <p id="welcomeUser">Loading...</p>
+                        <div class="welcome-actions">
+                            <button id="startExamBtn" class="btn btn-primary">Start Exam</button>
+                            <button id="browseExamsBtn" class="btn btn-secondary">Browse Exams</button>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Exams Taken</h3>
+                            <p id="statExamsTaken" class="stat-value">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Average Score</h3>
+                            <p id="statAvgScore" class="stat-value">0%</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Violations</h3>
+                            <p id="statViolations" class="stat-value">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Faculty Dashboard Page -->
+            <div id="facultyDashboardPage" class="page">
+                <div class="faculty-dashboard">
+                    <div class="dashboard-header">
+                        <h2>Faculty Dashboard</h2>
+                        <button id="createExamBtn" class="btn btn-primary">
+                            ➕ Create New Exam
+                        </button>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <!-- Quick Stats -->
+                        <div class="dashboard-section">
+                            <h3>📊 Statistics</h3>
+                            <div class="stats-container">
+                                <div class="stat">
+                                    <span class="stat-label">Total Exams</span>
+                                    <span class="stat-number" id="facultyTotalExams">0</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-label">Active Exams</span>
+                                    <span class="stat-number" id="facultyActiveExams">0</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-label">Total Students</span>
+                                    <span class="stat-number" id="facultyTotalStudents">0</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-label">Avg Violations</span>
+                                    <span class="stat-number" id="facultyAvgViolations">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- My Exams -->
+                        <div class="dashboard-section">
+                            <h3>📝 My Exams</h3>
+                            <div id="facultyExamsList" class="exams-list">
+                                <p>Loading your exams...</p>
+                            </div>
+                        </div>
+
+                        <!-- Recent Submissions -->
+                        <div class="dashboard-section">
+                            <h3>📤 Recent Submissions</h3>
+                            <div id="recentSubmissions" class="submissions-list">
+                                <p>No recent submissions</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Create Exam Modal -->
+            <div id="createExamModal" class="modal" style="display:none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Create New Exam</h2>
+                        <button class="close-modal" onclick="closeCreateExamModal()">&times;</button>
+                    </div>
+
+                    <form id="createExamForm" class="modal-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="examTitle">Exam Title *</label>
+                                <input type="text" id="examTitle" class="form-input" placeholder="e.g., Python Basics" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="examDuration">Duration (minutes) *</label>
+                                <input type="number" id="examDuration" class="form-input" placeholder="60" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="examTotalMarks">Total Marks *</label>
+                                <input type="number" id="examTotalMarks" class="form-input" placeholder="100" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="examPassingMarks">Passing Marks *</label>
+                                <input type="number" id="examPassingMarks" class="form-input" placeholder="40" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="examDescription">Description</label>
+                            <textarea id="examDescription" class="form-input" placeholder="Exam description" rows="3"></textarea>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="examStartTime">Start Time *</label>
+                                <input type="datetime-local" id="examStartTime" class="form-input" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="examEndTime">End Time *</label>
+                                <input type="datetime-local" id="examEndTime" class="form-input" required>
+                            </div>
+                        </div>
+
+                        <div class="form-section-title">Proctoring Settings</div>
+                        <div class="form-row checkboxes">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="enableCamera" checked>
+                                <span>📷 Enable Camera</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="enableMic" checked>
+                                <span>🎤 Enable Microphone</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="enableScreenshot" checked>
+                                <span>📸 Enable Screenshots</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="recordScreen" checked>
+                                <span>🎥 Record Screen</span>
+                            </label>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="closeCreateExamModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Create Exam</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Faculty Dashboard -->
+            <div id="facultyDashboardPage" class="page">
+                <div class="page-header">
+                    <div class="header-title-section">
+                        <h2>Faculty Dashboard</h2>
+                        <button class="btn btn-primary" onclick="showCreateExamModal()">
+                            ➕ Create New Exam
+                        </button>
+                    </div>
+                </div>
+
+                <div class="dashboard-stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalExamsCount">0</div>
+                        <div class="stat-label">Total Exams Created</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalStudentsCount">0</div>
+                        <div class="stat-label">Total Students Enrolled</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="activeExamsCount">0</div>
+                        <div class="stat-label">Active Exams</div>
+                    </div>
+                </div>
+
+                <div class="exams-section">
+                    <h3>Your Exams</h3>
+                    <div id="facultyExamsList" class="exams-grid">
+                        <div class="loading">Loading your exams...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exams Page -->
+            <div id="examsPage" class="page">
+                <div class="page-header">
+                    <div class="header-title-section">
+                        <h2>Available Exams</h2>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-secondary" onclick="loadExams()" title="Refresh exams list">
+                                🔄 Refresh
+                            </button>
+                            <button id="createExamBtn" class="btn btn-primary" style="display: none;" onclick="showCreateExamModal()">
+                                ➕ Create New Exam
+                            </button>
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <input type="text" id="searchExams" placeholder="Search exams..." class="search-input">
+                        <select id="filterStatus" class="filter-select">
+                            <option value="">All Status</option>
+                            <option value="published">Published</option>
+                            <option value="active">Active</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="examsList" class="exams-grid">
+                    <div class="loading">Loading exams...</div>
+                </div>
+            </div>
+
+            <!-- Exam Interface -->
+            <div id="examPage" class="page">
+                <div class="exam-container">
+                    <!-- Exam Header -->
+                    <div class="exam-header">
+                        <div class="exam-header-title">
+                            <h2 id="examTitle">Exam Title</h2>
+                        </div>
+                        <div class="exam-header-info">
+                            <span class="exam-info-item">📅 Starts: <span id="examStart">--</span></span>
+                            <span class="exam-info-item">| Ends: <span id="examEnd">--</span> | <span id="timeRemaining">2h</span> remaining</span>
+                        </div>
+                        <div class="exam-header-violations">
+                            <div class="violations-display">
+                                <span id="violationCount">0</span>/<span id="violationMax">3</span>
+                            </div>
+                            <span class="violations-label">Violations</span>
+                        </div>
+                    </div>
+
+                    <!-- Section Tabs -->
+                    <div class="exam-tabs">
+                        <button class="tab-btn active" data-section="mcq">MCQ Section</button>
+                        <button class="tab-btn" data-section="coding">Coding Section</button>
+                    </div>
+
+                    <!-- Proctoring Status (Hidden during exam) -->
+                    <div class="proctoring-panel">
+                        <div class="proctoring-status">
+                            <div class="status-item">
+                                <span class="status-label">📷 Camera:</span>
+                                <span id="cameraStatus" class="status-value active">ON</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">🎤 Mic:</span>
+                                <span id="micStatus" class="status-value active">ON</span>
+                            </div>
+                        </div>
+                        <!-- Video Feed -->
+                        <div class="video-container">
+                            <video id="cameraFeed" autoplay muted playsinline></video>
+                            <canvas id="cameraCanvas" style="display:none;"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Main Exam Content -->
+                    <div class="exam-content-area">
+                        <!-- Questions Display -->
+                        <div id="questionContainer" class="question-container">
+                            <p>Loading question...</p>
+                        </div>
+
+                        <!-- MCQ Options -->
+                        <div id="mcqPanel" class="mcq-panel">
+                            <div id="optionsContainer" class="options-grid">
+                                <!-- Options will be generated here -->
+                            </div>
+                        </div>
+
+                        <!-- Code Editor Panel -->
+                        <div id="editorPanel" class="editor-panel" style="display:none;">
+                            <div class="editor-header">
+                                <h3>Code Editor</h3>
+                                <select id="languageSelect" class="language-select">
+                                    <option>Python</option>
+                                    <option>JavaScript</option>
+                                    <option>Java</option>
+                                    <option>C++</option>
+                                </select>
+                            </div>
+
+                            <!-- Code Editor -->
+                            <div class="code-editor-section">
+                                <div class="editor-label">Code:</div>
+                                <textarea id="codeEditor" class="code-editor" placeholder="Write your code here..."></textarea>
+                                <button onclick="executeCode()" class="btn btn-success">▶ Execute Code</button>
+                            </div>
+
+                            <!-- Test Cases -->
+                            <div class="test-cases-section">
+                                <div class="editor-label">Test Cases:</div>
+                                <div id="testCasesContainer" class="test-cases-list">
+                                    <p>No test cases available</p>
+                                </div>
+                            </div>
+
+                            <!-- Output -->
+                            <div class="code-output">
+                                <div class="editor-label">Output:</div>
+                                <div id="codeOutput" class="output-box"></div>
+                            </div>
+
+                            <!-- Submit Button -->
+                            <button onclick="submitCodingAnswer()" class="btn btn-success full-width">✓ Submit Answer</button>
+                        </div>
+                    </div>
+
+                    <!-- Exam Footer -->
+                    <div class="exam-footer">
+                        <div class="footer-left">
+                            <button id="prevBtn" class="btn btn-secondary" onclick="previousQuestion()">← Previous</button>
+                            <span class="question-counter">Question: <span id="currentQuestion">1</span> / <span id="totalQuestions">10</span></span>
+                            <button id="nextBtn" class="btn btn-secondary" onclick="nextQuestion()">Next →</button>
+                        </div>
+                        <div class="footer-actions">
+                            <button onclick="saveDraft()" class="btn btn-secondary">💾 Save Draft</button>
+                            <button onclick="submitMCQAnswer()" id="submitAnswerBtn" class="btn btn-primary">✓ Submit Answer</button>
+                            <button onclick="submitExamBtn()" class="btn btn-submit-exam">🏁 Submit Exam</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Widget -->
+                <div class="chat-widget">
+                    <div class="chat-bubble">
+                        <div class="chat-icon">💬</div>
+                        <div class="chat-label">Exam Help</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Block Page - Shown when exam is blocked -->
+            <div id="blockPage" class="page">
+                <div class="block-container">
+                    <div class="block-content">
+                        <div class="block-icon">🚫</div>
+                        <h1>Exam Blocked</h1>
+                        <p class="block-reason" id="blockReason">You have exceeded the maximum allowed violations.</p>
+                        <div class="block-details">
+                            <div class="detail-item">
+                                <span class="detail-label">Total Violations:</span>
+                                <span class="detail-value" id="blockViolationCount">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Reason:</span>
+                                <span class="detail-value" id="blockViolationType">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Time Blocked:</span>
+                                <span class="detail-value" id="blockTime">-</span>
+                            </div>
+                        </div>
+                        <p class="block-message">Your exam has been automatically submitted and blocked due to excessive violations. Please contact your instructor for further assistance.</p>
+                        <button onclick="redirectToLogin()" class="btn btn-primary">Return to Login</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alert Modal for Violation Notifications -->
+            <div id="alertOverlay" class="alert-overlay">
+                <div class="alert-modal" id="alertModal">
+                    <div class="alert-icon" id="alertIcon">🚨</div>
+                    <h2 class="alert-title" id="alertTitle">Alert</h2>
+                    <p class="alert-message" id="alertMessage">A violation has been detected.</p>
+                    <div class="alert-details" id="alertDetails" style="display:none;">
+                        <p id="alertDetailContent">Details here</p>
+                    </div>
+                    <div class="alert-actions">
+                        <button class="alert-btn alert-btn-primary" onclick="closeAlert()">I Understand</button>
+                        <button class="alert-btn alert-btn-secondary" onclick="removePhoneAlert();" id="removePhoneBtn" style="display:none;">Remove Device & Continue</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Page -->
+            <div id="profilePage" class="page">
+                <div class="profile-container">
+                    <div class="profile-header">
+                        <h2>My Profile</h2>
+                    </div>
+
+                    <div class="profile-grid">
+                        <div class="profile-info">
+                            <h3>Personal Information</h3>
+                            <div class="info-group">
+                                <label>Username:</label>
+                                <p id="profileUsername">-</p>
+                            </div>
+                            <div class="info-group">
+                                <label>Email:</label>
+                                <p id="profileEmail">-</p>
+                            </div>
+                            <div class="info-group">
+                                <label>Institution:</label>
+                                <p id="profileInstitution">-</p>
+                            </div>
+                            <div class="info-group">
+                                <label>Phone:</label>
+                                <p id="profilePhone">-</p>
+                            </div>
+                        </div>
+
+                        <div class="profile-stats">
+                            <h3>Statistics</h3>
+                            <div class="stats-list">
+                                <div class="stat-row">
+                                    <span>Exams Completed:</span>
+                                    <strong id="statsCompleted">0</strong>
+                                </div>
+                                <div class="stat-row">
+                                    <span>Average Score:</span>
+                                    <strong id="statsAverage">0%</strong>
+                                </div>
+                                <div class="stat-row">
+                                    <span>Total Violations:</span>
+                                    <strong id="statsTotalViolations">0</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Premium Dark Login Page -->
+            <div id="loginPage" class="page">
+                <div class="premium-auth-container">
+                    <!-- Background Elements -->
+                    <div class="auth-bg-shapes">
+                        <div class="shape shape-1"></div>
+                        <div class="shape shape-2"></div>
+                        <div class="shape shape-3"></div>
+                    </div>
+
+                    <!-- Main Auth Content -->
+                    <div class="premium-auth-wrapper">
+                        <!-- Logo Section -->
+                        <div class="auth-logo-section">
+                            <div class="auth-logo">📋</div>
+                            <h1>Exam Proctoring Pro</h1>
+                            <p>Secure Examination Platform</p>
+                        </div>
+
+                        <!-- Tab Selector -->
+                        <div class="auth-tabs">
+                            <button class="auth-tab active" data-tab="student">
+                                <span class="tab-icon">👨‍🎓</span>
+                                <span>Student</span>
+                            </button>
+                            <button class="auth-tab" data-tab="faculty">
+                                <span class="tab-icon">👨‍🏫</span>
+                                <span>Faculty</span>
+                            </button>
+                        </div>
+
+                        <!-- Student Login Tab -->
+                        <div class="auth-tab-content active" id="studentTab">
+                            <div class="premium-auth-card">
+                                <h2>Student Login</h2>
+                                <p class="auth-subtitle">Take exams with proctoring</p>
+                                
+                                <form id="loginForm" class="premium-form">
+                                    <div class="form-group">
+                                        <label for="loginUsername">
+                                            <span class="label-icon">👤</span> Username
+                                        </label>
+                                        <input type="text" id="loginUsername" class="premium-input" placeholder="Enter your username" required>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="loginPassword">
+                                            <span class="label-icon">🔐</span> Password
+                                        </label>
+                                        <input type="password" id="loginPassword" class="premium-input" placeholder="Enter your password" required>
+                                    </div>
+
+                                    <div class="form-remember">
+                                        <input type="checkbox" id="rememberMe">
+                                        <label for="rememberMe">Remember me</label>
+                                    </div>
+
+                                    <button type="submit" class="btn btn-premium-primary full-width">
+                                        Sign In
+                                    </button>
+                                </form>
+
+                                <div class="auth-divider">
+                                    <span>Don't have an account?</span>
+                                </div>
+
+                                <button class="btn btn-premium-secondary full-width" onclick="showSignup()">
+                                    Create Account
+                                </button>
+
+                                <p class="auth-help">
+                                    <a href="#">Forgot password?</a>
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Faculty Login Tab -->
+                        <div class="auth-tab-content" id="facultyTab">
+                            <div class="premium-auth-card">
+                                <h2>Faculty Login</h2>
+                                <p class="auth-subtitle">Create and manage exams</p>
+                                
+                                <form id="facultyLoginForm" class="premium-form">
+                                    <div class="form-group">
+                                        <label for="facultyUsername">
+                                            <span class="label-icon">👤</span> Username
+                                        </label>
+                                        <input type="text" id="facultyUsername" class="premium-input" placeholder="Enter your username" required>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="facultyPassword">
+                                            <span class="label-icon">🔐</span> Password
+                                        </label>
+                                        <input type="password" id="facultyPassword" class="premium-input" placeholder="Enter your password" required>
+                                    </div>
+
+                                    <div class="form-remember">
+                                        <input type="checkbox" id="rememberMeFaculty">
+                                        <label for="rememberMeFaculty">Remember me</label>
+                                    </div>
+
+                                    <button type="submit" class="btn btn-premium-primary full-width">
+                                        Sign In
+                                    </button>
+                                </form>
+
+                                <div class="auth-divider">
+                                    <span>Request faculty access?</span>
+                                </div>
+
+                                <button class="btn btn-premium-secondary full-width" onclick="showFacultySignup()">
+                                    Register as Faculty
+                                </button>
+
+                                <p class="auth-help">
+                                    <a href="#">Forgot password?</a>
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Features -->
+                        <div class="auth-features">
+                            <div class="feature">
+                                <span class="feature-icon">🎯</span>
+                                <span>Secure Testing</span>
+                            </div>
+                            <div class="feature">
+                                <span class="feature-icon">📊</span>
+                                <span>Real Analytics</span>
+                            </div>
+                            <div class="feature">
+                                <span class="feature-icon">🔒</span>
+                                <span>Proctored</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signup Page -->
+            <div id="signupPage" class="page" style="display:none;">
+                <div class="premium-auth-container">
+                    <!-- Background Elements -->
+                    <div class="auth-bg-shapes">
+                        <div class="shape shape-1"></div>
+                        <div class="shape shape-2"></div>
+                        <div class="shape shape-3"></div>
+                    </div>
+
+                    <div class="premium-auth-wrapper">
+                        <div class="auth-logo-section">
+                            <div class="auth-logo">📋</div>
+                            <h1>Exam Proctoring Pro</h1>
+                            <p>Create Your Account</p>
+                        </div>
+
+                        <div class="premium-auth-card">
+                            <h2>Student Registration</h2>
+                            <p class="auth-subtitle">Join our secure exam platform</p>
+                            
+                            <form id="signupForm" class="premium-form">
+                                <div class="form-group">
+                                    <label for="signupUsername">
+                                        <span class="label-icon">👤</span> Username
+                                    </label>
+                                    <input type="text" id="signupUsername" class="premium-input" placeholder="Choose username" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="signupEmail">
+                                        <span class="label-icon">✉️</span> Email
+                                    </label>
+                                    <input type="email" id="signupEmail" class="premium-input" placeholder="Enter your email" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="signupPassword">
+                                        <span class="label-icon">🔐</span> Password
+                                    </label>
+                                    <input type="password" id="signupPassword" class="premium-input" placeholder="Create strong password" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="signupInstitution">
+                                        <span class="label-icon">🏛️</span> Institution
+                                    </label>
+                                    <input type="text" id="signupInstitution" class="premium-input" placeholder="Your college/university">
+                                </div>
+
+                                <div class="form-checkbox">
+                                    <input type="checkbox" id="agreeTerms" required>
+                                    <label for="agreeTerms">I agree to the Terms and Conditions</label>
+                                </div>
+
+                                <button type="submit" class="btn btn-premium-primary full-width">
+                                    Create Account
+                                </button>
+                            </form>
+
+                            <p class="auth-link">
+                                Already have an account? <a href="#" onclick="showLogin()">Sign in here</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Faculty Signup Page -->
+            <div id="facultySignupPage" class="page" style="display:none;">
+                <div class="premium-auth-container">
+                    <!-- Background Elements -->
+                    <div class="auth-bg-shapes">
+                        <div class="shape shape-1"></div>
+                        <div class="shape shape-2"></div>
+                        <div class="shape shape-3"></div>
+                    </div>
+
+                    <div class="premium-auth-wrapper">
+                        <div class="auth-logo-section">
+                            <div class="auth-logo">📋</div>
+                            <h1>Exam Proctoring Pro</h1>
+                            <p>Faculty Registration</p>
+                        </div>
+
+                        <div class="premium-auth-card">
+                            <h2>Register as Faculty</h2>
+                            <p class="auth-subtitle">Create and manage exams</p>
+                            
+                            <form id="facultySignupForm" class="premium-form">
+                                <div class="form-group">
+                                    <label for="facultyRegUsername">
+                                        <span class="label-icon">👤</span> Username
+                                    </label>
+                                    <input type="text" id="facultyRegUsername" class="premium-input" placeholder="Choose username" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="facultyRegEmail">
+                                        <span class="label-icon">✉️</span> Email
+                                    </label>
+                                    <input type="email" id="facultyRegEmail" class="premium-input" placeholder="Your faculty email" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="facultyRegPassword">
+                                        <span class="label-icon">🔐</span> Password
+                                    </label>
+                                    <input type="password" id="facultyRegPassword" class="premium-input" placeholder="Create strong password" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="facultyRegDepartment">
+                                        <span class="label-icon">🏢</span> Department
+                                    </label>
+                                    <input type="text" id="facultyRegDepartment" class="premium-input" placeholder="Your department">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="facultyRegInstitution">
+                                        <span class="label-icon">🏛️</span> Institution
+                                    </label>
+                                    <input type="text" id="facultyRegInstitution" class="premium-input" placeholder="Your institution">
+                                </div>
+
+                                <div class="form-checkbox">
+                                    <input type="checkbox" id="agreeTermsFaculty" required>
+                                    <label for="agreeTermsFaculty">I agree to the Faculty Terms and Conditions</label>
+                                </div>
+
+                                <button type="submit" class="btn btn-premium-primary full-width">
+                                    Register Now
+                                </button>
+                            </form>
+
+                            <p class="auth-link">
+                                Already registered? <a href="#" onclick="showLogin()">Sign in here</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Notification Toast -->
+        <div id="notificationToast" class="toast-notification"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="{% static 'js/api.js' %}"></script>
+    <script src="{% static 'js/app.js' %}"></script>
+</body>
+</html>
