@@ -1127,14 +1127,28 @@ def clean_transcript_text(text: str) -> str:
 def download_transcript(video_id: str) -> Tuple[str, List[Dict[str, Any]]]:
     """Downloads video transcripts with timestamps, cleans text, and chunk tags them."""
     raw_segments = []
+    api = YouTubeTranscriptApi()
     try:
-        raw_segments = YouTubeTranscriptApi().fetch(video_id, languages=['en', 'en-US'])
+        raw_segments = api.fetch(video_id, languages=['en', 'en-US', 'en-GB', 'en-CA', 'en-IN'])
     except Exception as e:
         try:
-            # Fallback to auto-captions
-            raw_segments = YouTubeTranscriptApi().fetch(video_id)
+            transcript_list = api.list(video_id)
+            transcript_obj = None
+            for t in transcript_list:
+                if getattr(t, 'is_translatable', False):
+                    try:
+                        transcript_obj = t.translate('en')
+                        break
+                    except Exception:
+                        pass
+            if not transcript_obj:
+                for t in transcript_list:
+                    transcript_obj = t
+                    break
+            if transcript_obj:
+                raw_segments = transcript_obj.fetch()
         except Exception as e2:
-            print(f"YouTube transcript failed: {e2}")
+            print(f"YouTube transcript multi-lang fallback failed: {e2}")
             # Stub empty transcript to allow course processing fallback
             raw_segments = [{"text": "Course tutorial introduction and coding basics.", "start": 0.0, "duration": 60.0}]
 

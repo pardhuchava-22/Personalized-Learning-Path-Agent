@@ -35,34 +35,75 @@ def extract_video_id(url):
 
 def fetch_transcript(video_url):
     """
-    Fetches transcript using youtube-transcript-api directly.
+    Fetches transcript using youtube-transcript-api with multi-language and fallback support.
     """
     video_id = extract_video_id(video_url)
     if not video_id:
         raise ValueError("Invalid YouTube URL")
 
+    from youtube_transcript_api import YouTubeTranscriptApi
+    print(f"[YouTube API] Fetching transcript for ID: {video_id}")
+    api = YouTubeTranscriptApi()
+
+    # 1. Try directly fetching English or common regional English variants
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-        print(f"[YouTube API] Fetching transcript directly for ID: {video_id}")
-        api = YouTubeTranscriptApi()
-        transcript_list = api.fetch(video_id, languages=['en'])
-        
-        # Combine the transcript segments into a single plain text string
+        transcript_list = api.fetch(video_id, languages=['en', 'en-US', 'en-GB', 'en-CA', 'en-IN'])
         full_transcript = " ".join(getattr(seg, 'text', seg.get('text') if isinstance(seg, dict) else '') for seg in transcript_list)
-        return full_transcript
+        if full_transcript.strip():
+            print(f"[YouTube API] Successfully fetched English transcript ({len(full_transcript)} chars).")
+            return full_transcript.strip()
     except Exception as e:
-        print(f"[YouTube API] Direct fetch failed: {e}. Attempting auto-sub fallback...")
-        try:
-            from youtube_transcript_api import YouTubeTranscriptApi
-            api = YouTubeTranscriptApi()
-            transcript_list_obj = api.list(video_id)
-            transcript = transcript_list_obj.find_transcript(['en'])
-            fetched_data = transcript.fetch()
+        print(f"[YouTube API] Direct English fetch notice: {e}. Searching all available video transcripts...")
+
+    # 2. Inspect available transcript list (manual & auto-generated)
+    try:
+        transcript_list_obj = api.list(video_id)
+        transcript_obj = None
+
+        # 2a. First priority: Check if any transcript is translatable to English
+        for t in transcript_list_obj:
+            if getattr(t, 'is_translatable', False):
+                try:
+                    transcript_obj = t.translate('en')
+                    print(f"[YouTube API] Translated transcript from {t.language_code} to English.")
+                    break
+                except Exception:
+                    pass
+
+        # 2b. Second priority: Use any available transcript in original language (e.g. Hindi, Spanish, etc.)
+        if not transcript_obj:
+            for t in transcript_list_obj:
+                transcript_obj = t
+                print(f"[YouTube API] Using available transcript in original language: {t.language_code} ({t.language})")
+                break
+
+        if transcript_obj:
+            fetched_data = transcript_obj.fetch()
             full_transcript = " ".join(getattr(seg, 'text', seg.get('text') if isinstance(seg, dict) else '') for seg in fetched_data)
-            return full_transcript
-        except Exception as e_fallback:
-            print(f"[YouTube API] Fallback failed: {e_fallback}")
-            raise RuntimeError(f"Could not extract YouTube transcript: {e_fallback}")
+            if full_transcript.strip():
+                print(f"[YouTube API] Successfully extracted transcript ({len(full_transcript)} chars).")
+                return full_transcript.strip()
+    except Exception as e_list:
+        print(f"[YouTube API] Transcript listing failed: {e_list}. Trying yt-dlp fallback...")
+
+    # 3. Fallback to yt-dlp to extract video metadata & auto-captions
+    try:
+        print(f"[YouTube API] Attempting yt-dlp extraction for ID: {video_id}...")
+        import yt_dlp
+        ydl_opts = {'quiet': True, 'skip_download': True, 'no_warnings': True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            title = info.get('title', '')
+            description = info.get('description', '')
+            tags = " ".join(info.get('tags', [])) if isinstance(info.get('tags'), list) else ""
+            combined_info = f"Video Title: {title}\nDescription:\n{description}\nKey Topics: {tags}"
+            if len(combined_info.strip()) > 30:
+                print(f"[YouTube API] Extracted video summary via yt-dlp ({len(combined_info)} chars).")
+                return combined_info.strip()
+    except Exception as e_ytdlp:
+        print(f"[YouTube API] yt-dlp metadata fallback failed: {e_ytdlp}")
+
+    raise RuntimeError(f"Could not extract transcript or video details for {video_url}. Please ensure the video is publicly accessible.")
 
 def generate_fallback_exam_content(transcript, difficulty='Intermediate', count=5, include_coding=True):
     """
@@ -71,7 +112,8 @@ def generate_fallback_exam_content(transcript, difficulty='Intermediate', count=
     Ensures faculty assignment creation always succeeds even if the Gemini API key is
     flagged (e.g. 403 leaked) or quota is exhausted.
     """
-    timestamp = int(timezone.now().timestamp())
+    import time
+    timestamp = int(time.time())
     transcript_lower = transcript.lower() if transcript else ""
     
     # Analyze topic areas from transcript
@@ -296,6 +338,7 @@ def generate_exam_content(transcript, difficulty='Intermediate', count=5, includ
             2. If coding challenges are included, you MUST generate at least 1-2 coding challenges. Ensure the starterCode and solutionCode are complete, correct, and matching the programming language.
             3. Ensure all questions are directly derived from the concepts discussed in the transcript.
             4. Provide clear, concise descriptions.
+            5. Regardless of whether the transcript is in English, Hindi, or any other language, formulate and output all question text, options, and coding explanations in English.
             
             OUTPUT FORMAT (STRICT JSON):
             Return a JSON array of question objects. Each object MUST follow this structure:
@@ -396,7 +439,8 @@ def generate_exam_content(transcript, difficulty='Intermediate', count=5, includ
                 elif isinstance(parsed_data, list):
                     questions = parsed_data
                     
-                current_timestamp = int(timezone.now().timestamp())
+                import time
+                current_timestamp = int(time.time())
                 for i, q in enumerate(questions):
                     if 'id' not in q or not q['id']:
                         q['id'] = f"gen_{i}_{current_timestamp}"

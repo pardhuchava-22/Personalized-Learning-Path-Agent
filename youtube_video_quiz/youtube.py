@@ -79,7 +79,32 @@ def get_transcript_with_timestamps(video_id):
     
     try:
         api = YouTubeTranscriptApi()
-        fetched_data = api.fetch(video_id, languages=['en'])
+        fetched_data = None
+        try:
+            fetched_data = api.fetch(video_id, languages=['en', 'en-US', 'en-GB', 'en-CA', 'en-IN'])
+        except Exception:
+            try:
+                transcript_list_obj = api.list(video_id)
+                transcript_obj = None
+                for t in transcript_list_obj:
+                    if getattr(t, 'is_translatable', False):
+                        try:
+                            transcript_obj = t.translate('en')
+                            break
+                        except Exception:
+                            pass
+                if not transcript_obj:
+                    for t in transcript_list_obj:
+                        transcript_obj = t
+                        break
+                if transcript_obj:
+                    fetched_data = transcript_obj.fetch()
+            except Exception as e_inner:
+                print(f"Fallback transcript search failed: {e_inner}")
+
+        if not fetched_data:
+            return None
+
         transcript_list = []
         for seg in fetched_data:
             if isinstance(seg, dict):

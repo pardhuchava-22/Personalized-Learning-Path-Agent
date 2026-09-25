@@ -272,18 +272,23 @@ export const FacultyExamCreateScreen: React.FC<FacultyExamCreateProps> = ({ onNa
       {[1, 2, 3, 4].map((step) => {
         const labels = ['Details', 'Content Source', 'Editor', 'Settings'];
         return (
-            <div key={step} className="flex flex-col items-center gap-2 bg-[#F8FAFC] px-2">
+            <div 
+                key={step} 
+                onClick={() => setCurrentStep(step)}
+                className="flex flex-col items-center gap-2 bg-[#F8FAFC] px-2 cursor-pointer group select-none"
+                title={`Go to step ${step}: ${labels[step-1]}`}
+            >
             <div 
                 className={`
                 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300
-                ${step < currentStep ? 'bg-indigo-600 border-indigo-600 text-white' : 
+                ${step < currentStep ? 'bg-indigo-600 border-indigo-600 text-white group-hover:bg-indigo-700' : 
                     step === currentStep ? 'bg-white border-indigo-600 text-indigo-600 shadow-[0_0_0_4px_rgba(79,70,229,0.2)] scale-110' : 
-                    'bg-white border-slate-300 text-slate-400'}
+                    'bg-white border-slate-300 text-slate-400 group-hover:border-indigo-400 group-hover:text-indigo-600'}
                 `}
             >
                 {step < currentStep ? <Check className="w-4 h-4" /> : step}
             </div>
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${step <= currentStep ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <span className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${step <= currentStep ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-600'}`}>
                 {labels[step-1]}
             </span>
             </div>
@@ -359,43 +364,109 @@ export const FacultyExamCreateScreen: React.FC<FacultyExamCreateProps> = ({ onNa
                                 onChange={(e) => setDetails({...details, totalMarks: parseInt(e.target.value) || 0})} 
                             />
                         </div>
+
+                        <div className="pt-4 flex justify-end">
+                            <Button onClick={handleNext} className="w-full sm:w-auto px-8 font-bold">
+                                Continue to Content Source <ArrowRight className="w-4 h-4 ml-2" />
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* STEP 2: CONTENT SOURCE (AI) */}
+            {/* STEP 2: CONTENT SOURCE (AI or Manual) */}
             {currentStep === 2 && (
-                <div className="max-w-4xl mx-auto animate-fade-in">
-                    <h2 className="text-xl font-bold text-slate-900 mb-6 text-center">How would you like to create this exam?</h2>
+                <div className="max-w-4xl mx-auto animate-fade-in space-y-6">
+                    <h2 className="text-xl font-bold text-slate-900 mb-2 text-center">How would you like to create this exam?</h2>
+                    <p className="text-slate-500 text-sm text-center max-w-md mx-auto mb-6">Choose whether to author questions manually or let AI generate them from a YouTube lecture.</p>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Manual Card */}
                         <div 
                             onClick={() => setAiConfig({...aiConfig, sourceType: 'manual'})}
-                            className={`p-6 rounded-2xl border-2 cursor-pointer transition-all hover:shadow-lg ${aiConfig.sourceType === 'manual' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                            className={`p-6 rounded-2xl border-2 cursor-pointer transition-all hover:shadow-lg relative overflow-hidden ${aiConfig.sourceType === 'manual' ? 'border-indigo-600 bg-indigo-50/50 shadow-md ring-2 ring-indigo-600/20' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                         >
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${aiConfig.sourceType === 'manual' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                            {aiConfig.sourceType === 'manual' && (
+                                <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl tracking-wider">
+                                    ACTIVE
+                                </div>
+                            )}
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${aiConfig.sourceType === 'manual' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-100 text-slate-500'}`}>
                                 <FileText className="w-6 h-6" />
                             </div>
                             <h3 className="font-bold text-lg text-slate-900">Start from Scratch</h3>
-                            <p className="text-sm text-slate-500 mt-2">Manually add questions one by one. Best for specific, custom assessments.</p>
+                            <p className="text-sm text-slate-500 mt-2">Manually add questions one by one. Best for custom quizzes, midterms, and tailored coding challenges.</p>
+                            
+                            <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-indigo-600">Manual Authoring</span>
+                                <span className="text-xs font-bold text-indigo-600 flex items-center gap-1">
+                                    Configure Below <ChevronDown className="w-3.5 h-3.5" />
+                                </span>
+                            </div>
                         </div>
 
                         {/* AI Card */}
                         <div 
                             onClick={() => setAiConfig({...aiConfig, sourceType: 'youtube'})}
-                            className={`p-6 rounded-2xl border-2 cursor-pointer transition-all hover:shadow-lg relative overflow-hidden ${aiConfig.sourceType === 'youtube' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                            className={`p-6 rounded-2xl border-2 cursor-pointer transition-all hover:shadow-lg relative overflow-hidden ${aiConfig.sourceType === 'youtube' ? 'border-indigo-600 bg-indigo-50/50 shadow-md ring-2 ring-indigo-600/20' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                         >
-                            {aiConfig.sourceType === 'youtube' && <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl">SELECTED</div>}
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${aiConfig.sourceType === 'youtube' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-500'}`}>
+                            {aiConfig.sourceType === 'youtube' && <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl tracking-wider">ACTIVE</div>}
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${aiConfig.sourceType === 'youtube' ? 'bg-red-600 text-white shadow-md shadow-red-200' : 'bg-red-50 text-red-500'}`}>
                                 <Youtube className="w-6 h-6" />
                             </div>
                             <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
                                 AI Video Generator <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500 animate-pulse" />
                             </h3>
                             <p className="text-sm text-slate-500 mt-2">Paste a YouTube URL. Our AI analyzes the transcript to generate relevant questions and code challenges.</p>
+                            
+                            <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-red-600">Gemini 2.5 Powered</span>
+                                <span className="text-xs font-bold text-red-600 flex items-center gap-1">
+                                    Configure Below <ChevronDown className="w-3.5 h-3.5" />
+                                </span>
+                            </div>
                         </div>
                     </div>
+
+                    {/* Manual Scratch Configuration Panel */}
+                    {aiConfig.sourceType === 'manual' && (
+                        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm animate-slide-up text-center">
+                            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-100 shadow-sm">
+                                <FileText className="w-8 h-8" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Build Your Exam from Scratch</h3>
+                            <p className="text-sm text-slate-500 max-w-md mx-auto mb-6">
+                                You are creating questions manually. Proceed to the Editor to add Multiple Choice Questions (MCQs) or interactive Coding Challenges with custom test cases.
+                            </p>
+                            
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-lg mx-auto">
+                                <Button 
+                                    onClick={handleNext}
+                                    className="w-full sm:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                                >
+                                    Proceed to Question Editor <ArrowRight className="w-4 h-4 ml-1" />
+                                </Button>
+                                <button 
+                                    onClick={() => {
+                                        addManualQuestion('mcq');
+                                        handleNext();
+                                    }}
+                                    className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                >
+                                    <List className="w-4 h-4" /> Start with + MCQ
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        addManualQuestion('coding');
+                                        handleNext();
+                                    }}
+                                    className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                >
+                                    <Code className="w-4 h-4" /> Start with + Coding
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* AI Configuration Panel */}
                     {aiConfig.sourceType === 'youtube' && (
@@ -486,15 +557,31 @@ export const FacultyExamCreateScreen: React.FC<FacultyExamCreateProps> = ({ onNa
                     </div>
 
                     {questions.length === 0 ? (
-                        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-20 text-center">
-                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
-                                <Plus className="w-8 h-8 text-slate-300" />
+                        <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl p-12 text-center shadow-inner">
+                            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-200 shadow-sm text-indigo-600">
+                                <Plus className="w-8 h-8" />
                             </div>
-                            <h3 className="text-slate-900 font-bold text-lg">No questions added yet</h3>
-                            <p className="text-slate-500 text-sm mt-1 max-w-xs mx-auto">Use AI to generate content or add questions manually using the buttons above.</p>
+                            <h3 className="text-slate-900 font-bold text-xl mb-1">No questions added yet</h3>
+                            <p className="text-slate-500 text-sm max-w-md mx-auto mb-6">
+                                Start creating your assessment by adding your first question. Choose between Multiple Choice Questions or interactive Coding Challenges.
+                            </p>
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                                <button 
+                                    onClick={() => addManualQuestion('mcq')}
+                                    className="w-full sm:w-auto px-6 py-3 text-sm font-bold bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
+                                >
+                                    <List className="w-4 h-4" /> + Add Multiple Choice Question (MCQ)
+                                </button>
+                                <button 
+                                    onClick={() => addManualQuestion('coding')}
+                                    className="w-full sm:w-auto px-6 py-3 text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl shadow-[0_4px_12px_rgba(79,70,229,0.25)] transition-all flex items-center justify-center gap-2"
+                                >
+                                    <Code className="w-4 h-4" /> + Add Coding Challenge
+                                </button>
+                            </div>
                         </div>
                     ) : (
-                        <div className="space-y-6 pb-12">
+                        <div className="space-y-6 pb-6">
                             {questions.map((q, idx) => (
                                 <QuestionEditorCard 
                                     key={q.id} 
@@ -512,23 +599,62 @@ export const FacultyExamCreateScreen: React.FC<FacultyExamCreateProps> = ({ onNa
                                     onDeleteTestCase={(tcId) => deleteTestCase(q.id, tcId)}
                                 />
                             ))}
+
+                            <div className="pt-4 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200">
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => addManualQuestion('mcq')}
+                                        className="text-xs font-bold bg-slate-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all flex items-center gap-1.5"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" /> Another MCQ
+                                    </button>
+                                    <button 
+                                        onClick={() => addManualQuestion('coding')}
+                                        className="text-xs font-bold bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 px-4 py-2 rounded-xl transition-all flex items-center gap-1.5"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" /> Another Coding Challenge
+                                    </button>
+                                </div>
+                                <Button onClick={handleNext} className="w-full sm:w-auto px-8 font-bold">
+                                    Continue to Settings ({questions.length} Questions) <ArrowRight className="w-4 h-4 ml-1" />
+                                </Button>
+                            </div>
                         </div>
                     )}
                 </div>
             )}
 
-            {/* STEP 4: SETTINGS (Placeholder) */}
+            {/* STEP 4: SETTINGS */}
             {currentStep === 4 && (
-                <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl border border-slate-200 text-center animate-fade-in">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center animate-fade-in">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Check className="w-8 h-8 text-green-600" />
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900 mb-2">Ready to Publish!</h2>
                     <p className="text-slate-500 mb-8">Review your exam settings or publish immediately.</p>
-                    <div className="bg-slate-50 rounded-xl p-4 text-left text-sm text-slate-600 space-y-2 mb-8">
-                        <p><span className="font-bold">Title:</span> {details.title}</p>
-                        <p><span className="font-bold">Questions:</span> {questions.length}</p>
-                        <p><span className="font-bold">Duration:</span> {details.duration} mins</p>
+                    <div className="bg-slate-50 rounded-xl p-4 text-left text-sm text-slate-600 space-y-2 mb-8 border border-slate-200">
+                        <p><span className="font-bold text-slate-800">Title:</span> {details.title || 'Untitled Exam'}</p>
+                        <p><span className="font-bold text-slate-800">Course:</span> {details.courseName || 'General'}</p>
+                        <p><span className="font-bold text-slate-800">Questions:</span> {questions.length} created</p>
+                        <p><span className="font-bold text-slate-800">Duration:</span> {details.duration} mins</p>
+                        <p><span className="font-bold text-slate-800">Total Marks:</span> {details.totalMarks}</p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <Button 
+                            variant="secondary" 
+                            onClick={handlePrev}
+                            className="w-full sm:w-auto px-6 border-slate-200 text-slate-600"
+                        >
+                            <ChevronLeft className="w-4 h-4 mr-1" /> Back to Editor
+                        </Button>
+                        <Button 
+                            onClick={handlePublishExam} 
+                            isLoading={isPublishing}
+                            className="w-full sm:w-auto px-10 bg-indigo-600 hover:bg-indigo-700 shadow-lg font-bold"
+                        >
+                            Publish Exam <Check className="w-4 h-4 ml-2" />
+                        </Button>
                     </div>
                 </div>
             )}

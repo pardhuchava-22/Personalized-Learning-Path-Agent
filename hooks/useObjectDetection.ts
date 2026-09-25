@@ -8,14 +8,17 @@ export interface Detection {
   data?: any;
 }
 
-// Cloud API base URL - priority: env var > hardcoded HF endpoint > localhost fallback
-const PROCTORING_API_BASE = (
-  (typeof process !== 'undefined' && process.env?.REACT_APP_PROCTORING_API_URL) ||
-  'https://venkat6789-proctoringengine.hf.space'
-).replace(/\/$/, '');
+// Hardcoded verified Cloud Proctoring Engine (YOLOv8 + MediaPipe + Gemini)
+const CLOUD_PROCTORING_URL = 'https://venkat6789-proctoringengine.hf.space';
 
-const API_ENDPOINT = `${PROCTORING_API_BASE}/analyze-frame`;
-const HEALTH_ENDPOINT = `${PROCTORING_API_BASE}/health`;
+// Resolve initial base URL - protect against pointing to Django backend (localhost:8000) which has no vision AI
+const getInitialApiBase = () => {
+  const envUrl = (typeof process !== 'undefined' && process.env?.REACT_APP_PROCTORING_API_URL) || '';
+  if (!envUrl || envUrl.includes('localhost:8000') || envUrl.includes('127.0.0.1:8000')) {
+    return CLOUD_PROCTORING_URL;
+  }
+  return envUrl.replace(/\/$/, '');
+};
 
 // Performance tuning constants
 const DETECTION_INTERVAL_MS = 1000;  // 1s between frames for low latency
@@ -29,34 +32,55 @@ export const useObjectDetection = (videoRef: React.RefObject<HTMLVideoElement | 
   const [detections, setDetections] = useState<Detection[]>([]);
   const [loading, setLoading] = useState(false);
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
+  const activeApiBaseRef = useRef<string>(getInitialApiBase());
   const requestRef = useRef<number>(undefined);
   const lastDetectionTime = useRef<number>(0);
   const isFetching = useRef<boolean>(false);
   const retryCount = useRef<number>(0);
   const consecutiveFailures = useRef<number>(0);
 
-  // Connection health check on mount
+  // Connection health check on mount with automatic cloud fallback
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
 
     const checkHealth = async () => {
+      const primaryUrl = activeApiBaseRef.current;
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(HEALTH_ENDPOINT, { signal: controller.signal });
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(`${primaryUrl}/health`, { signal: controller.signal });
         clearTimeout(timeout);
         if (!cancelled && res.ok) {
           const data = await res.json();
           setApiHealthy(data.status === 'healthy');
-          console.log('[Proctoring] Cloud API health:', data);
+          console.log('[Proctoring] Active API health:', primaryUrl, data);
+          return;
         }
       } catch (err) {
-        if (!cancelled) {
-          console.warn('[Proctoring] Cloud API health check failed:', err);
-          setApiHealthy(false);
+        console.warn(`[Proctoring] Health check failed for ${primaryUrl}:`, err);
+      }
+
+      // If primary failed and is not already cloud URL, failover to cloud
+      if (primaryUrl !== CLOUD_PROCTORING_URL) {
+        console.log('[Proctoring] Primary failed, attempting failover to HuggingFace Cloud Engine...');
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 8000);
+          const res = await fetch(`${CLOUD_PROCTORING_URL}/health`, { signal: controller.signal });
+          clearTimeout(timeout);
+          if (!cancelled && res.ok) {
+            activeApiBaseRef.current = CLOUD_PROCTORING_URL;
+            setApiHealthy(true);
+            console.log('[Proctoring] Successfully connected to fallback HuggingFace engine.');
+            return;
+          }
+        } catch (e) {
+          console.warn('[Proctoring] Fallback health check also failed:', e);
         }
       }
+
+      if (!cancelled) setApiHealthy(false);
     };
 
     checkHealth();
@@ -129,8 +153,9 @@ export const useObjectDetection = (videoRef: React.RefObject<HTMLVideoElement | 
       // Prepare request with AbortController timeout
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const activeBase = activeApiBaseRef.current;
 
-      const response = await fetch(API_ENDPOINT, {
+      const response = await fetch(`${activeBase}/analyze-frame`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
@@ -166,15 +191,36 @@ export const useObjectDetection = (videoRef: React.RefObject<HTMLVideoElement | 
           });
         }
 
-        // 3. Translate violations summary to detections schema (backwards compatibility)
+        // 3. Count detected faces and bodies for robust multi-person detection
+        const detectedFaces = mappedDetections.filter(d => d.class === 'face');
+        const detectedPersons = mappedDetections.filter(d => d.class === 'ssd_person' || d.class === 'person');
+        const totalFaces = detectedFaces.length;
+        const totalPersons = detectedPersons.length;
+
+        // 4. Translate violations summary to detections schema (backwards compatibility)
         const v = result.violations;
-        if (v) {
-          if (v.multiple_people) {
-            if (!mappedDetections.some(d => d.class === 'multiple_people_detected')) {
-              mappedDetections.push({ class: 'multiple_people_detected', score: 1.0 });
-            }
+        const isMultiFaceOrPerson = Boolean(
+          (v && v.multiple_people) || 
+          totalFaces > 1 || 
+          totalPersons > 1
+        );
+
+        if (isMultiFaceOrPerson) {
+          const effectiveFaceCount = Math.max(totalFaces, totalPersons, v?.multiple_people ? 2 : 1);
+          const existing = mappedDetections.find(d => d.class === 'multiple_people_detected');
+          if (existing) {
+            existing.data = { ...existing.data, faceCount: effectiveFaceCount, personCount: totalPersons };
+          } else {
+            mappedDetections.push({ 
+              class: 'multiple_people_detected', 
+              score: 1.0,
+              data: { faceCount: effectiveFaceCount, personCount: totalPersons }
+            });
           }
-          if (v.no_person) {
+        }
+
+        if (v) {
+          if (v.no_person && totalFaces === 0 && totalPersons === 0) {
             if (!mappedDetections.some(d => d.class === 'no_person')) {
               mappedDetections.push({ class: 'no_person', score: 1.0 });
             }
@@ -212,10 +258,21 @@ export const useObjectDetection = (videoRef: React.RefObject<HTMLVideoElement | 
         lastDetectionTime.current = now;
       } else {
         consecutiveFailures.current++;
-        console.warn(`[Proctoring] API response ${response.status}:`, await response.text().catch(() => ''));
+        console.warn(`[Proctoring] API response ${response.status} from ${activeBase}`);
+        // If current host returned 404 or server error, switch over to HuggingFace
+        if (activeBase !== CLOUD_PROCTORING_URL) {
+          console.warn('[Proctoring] Failing over to Cloud Proctoring Engine after error response...');
+          activeApiBaseRef.current = CLOUD_PROCTORING_URL;
+        }
       }
     } catch (err: any) {
       consecutiveFailures.current++;
+
+      // Automatically fallback to cloud if current host failed to connect
+      if (activeApiBaseRef.current !== CLOUD_PROCTORING_URL) {
+        console.warn('[Proctoring] Connection error, failing over to Cloud Proctoring Engine:', err.message);
+        activeApiBaseRef.current = CLOUD_PROCTORING_URL;
+      }
 
       // Retry once on abort/network error
       if (retryCount.current < MAX_RETRIES && (err.name === 'AbortError' || err.message?.includes('Failed to fetch'))) {

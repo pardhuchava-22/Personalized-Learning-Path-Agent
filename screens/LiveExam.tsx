@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Clock, ChevronLeft, ChevronRight, Info, AlertTriangle, Loader2, Play, Terminal,
-  CheckCircle, XCircle, Bookmark, PanelRightClose, PanelRightOpen, ShieldCheck, Code2
+  CheckCircle, XCircle, Bookmark, PanelRightClose, PanelRightOpen, ShieldCheck, Code2,
+  Users, CheckCircle2, ShieldAlert, Lock, Eye
 } from 'lucide-react';
 import { CodeEditor } from '../components/Lab/CodeEditor';
 import { FloatingWebcam } from '../components/Exam/FloatingWebcam';
@@ -34,11 +35,17 @@ export const LiveExamScreen: React.FC<LiveExamScreenProps> = ({ onNavigate }) =>
   const [violationCount, setViolationCount] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [isExamBlocked, setIsExamBlocked] = useState(false);
-  const [blockReason, setBlockReason] = useState<'violations' | 'absence'>('violations');
+  const [blockReason, setBlockReason] = useState<'violations' | 'absence' | 'multiple_people'>('violations');
+  const [isMultipleFacesBlocked, setIsMultipleFacesBlocked] = useState(false);
+  const [detectedFacesCount, setDetectedFacesCount] = useState<number>(0);
+  const [multipleFacesSnapshot, setMultipleFacesSnapshot] = useState<string | null>(null);
+  const [cleanStreakSeconds, setCleanStreakSeconds] = useState<number>(0);
   const [hasActiveViolation, setHasActiveViolation] = useState(false);
   const [incidentLog, setIncidentLog] = useState<any[]>([]);
   const lastViolationTime = useRef<Record<string, number>>({});
   const consecutiveAbsenceCount = useRef<number>(0);
+  const consecutiveMultiFacesFrames = useRef<number>(0);
+  const consecutiveCleanFrames = useRef<number>(0);
   const maxViolations = 5;
 
   // 1. Initial Load: Parse Params
@@ -221,9 +228,19 @@ export const LiveExamScreen: React.FC<LiveExamScreenProps> = ({ onNavigate }) =>
       if (isSubmitting) return;
 
       const face = detections.find(d => d.class === 'face');
-      const multiplePeople = detections.find(d => d.class === 'multiple_people_detected');
+      const allFaces = detections.filter(d => d.class === 'face');
+      const allPersons = detections.filter(d => d.class === 'ssd_person' || d.class === 'person');
+      const multiplePeopleDetected = detections.find(d => d.class === 'multiple_people_detected');
       const phone = detections.find(d => d.class === 'cell phone' && d.score > 0.45);
       const identityMismatch = detections.find(d => d.class === 'identity_mismatch');
+
+      // Comprehensive multi-face / multi-person detection
+      const totalFaceCount = Math.max(
+        allFaces.length,
+        allPersons.length,
+        multiplePeopleDetected?.data?.faceCount || (multiplePeopleDetected ? 2 : 0)
+      );
+      const isMultiFace = totalFaceCount > 1 || !!multiplePeopleDetected;
       
       // Identity Lock Match verification check
       if (identityMismatch) {
@@ -232,7 +249,7 @@ export const LiveExamScreen: React.FC<LiveExamScreenProps> = ({ onNavigate }) =>
 
       // Absence Check: ONLY trigger if BOTH YOLOv8 and MediaPipe detect 0 candidates (candidate is physically absent).
       const noPersonDetected = detections.some(d => d.class === 'no_person');
-      if (!face && noPersonDetected) {
+      if (!face && (noPersonDetected || allFaces.length === 0)) {
           reportViolation('absence', 'Candidate absence detected in assessment environment.', 'medium');
           consecutiveAbsenceCount.current += 1;
           
@@ -245,9 +262,52 @@ export const LiveExamScreen: React.FC<LiveExamScreenProps> = ({ onNavigate }) =>
           consecutiveAbsenceCount.current = 0;
       }
 
-      // Multiple People
-      if (multiplePeople) {
-          reportViolation('multiple_people', 'Multiple people detected in frame.', 'high', multiplePeople);
+      // REAL-TIME MULTIPLE FACES LOCKOUT
+      if (isMultiFace) {
+          consecutiveCleanFrames.current = 0;
+          setCleanStreakSeconds(0);
+          consecutiveMultiFacesFrames.current += 1;
+          setDetectedFacesCount(totalFaceCount);
+          setIsMultipleFacesBlocked(true);
+
+          // Capture immediate evidence snapshot
+          if (typeof (window as any).__proctoringTakeSnapshot === 'function') {
+              const snap = (window as any).__proctoringTakeSnapshot();
+              if (snap) {
+                  setMultipleFacesSnapshot(snap);
+              }
+          }
+
+          reportViolation(
+              'multiple_people', 
+              `Security Alert: Multiple individuals detected in frame (${totalFaceCount} faces/persons). Exam screen locked.`, 
+              'high', 
+              { faceCount: totalFaceCount, detections }
+          );
+
+          // Persistent multi-face lockout: If multiple people remain continuously in frame for > 30 seconds (~30 checks), terminate exam
+          if (consecutiveMultiFacesFrames.current >= 30) {
+              setBlockReason('multiple_people');
+              setIsExamBlocked(true);
+          }
+      } else {
+          consecutiveMultiFacesFrames.current = 0;
+          // When exactly 1 face is visible and no extra person
+          if (allFaces.length === 1 && allPersons.length <= 1) {
+              consecutiveCleanFrames.current += 1;
+              const streak = consecutiveCleanFrames.current;
+              setCleanStreakSeconds(streak);
+
+              // Auto-unlock after 3 consecutive clean frames (~3 seconds of verified single-candidate frame)
+              if (streak >= 3) {
+                  setIsMultipleFacesBlocked(false);
+                  setMultipleFacesSnapshot(null);
+                  setCleanStreakSeconds(0);
+              }
+          } else {
+              consecutiveCleanFrames.current = 0;
+              setCleanStreakSeconds(0);
+          }
       }
       
       // Mobile Phone
@@ -269,7 +329,6 @@ export const LiveExamScreen: React.FC<LiveExamScreenProps> = ({ onNavigate }) =>
       
       // Face Logic (Rotation & Visibility)
       if (face) {
-
           // 1. Partial Face Detection (Half face)
           if (face.data?.isPartial) {
               reportViolation('partial_face', 'Partial face detected. Please ensure full face is visible.', 'medium', face);
@@ -294,8 +353,8 @@ export const LiveExamScreen: React.FC<LiveExamScreenProps> = ({ onNavigate }) =>
         d.class === 'face_covered' || 
         (d.class === 'face' && d.data?.pose !== 'center')
       );
-      setHasActiveViolation(active.length > 0 || !face || noPersonDetected);
-  }, [reportViolation]);
+      setHasActiveViolation(active.length > 0 || isMultiFace || !face || noPersonDetected);
+  }, [reportViolation, isSubmitting]);
 
   // 6. Fullscreen Monitoring
   useEffect(() => {
@@ -860,18 +919,100 @@ export const LiveExamScreen: React.FC<LiveExamScreenProps> = ({ onNavigate }) =>
       {/* Overlays */}
       <FloatingWebcam className="bottom-24 right-6" onDetection={handleAIThreshold} />
 
+      {/* Real-Time Un-bypassable Multiple Faces Blocking Lockout Modal */}
+      {isMultipleFacesBlocked && !isExamBlocked && (
+        <div className="fixed inset-0 z-[80] bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 sm:p-8 animate-fade-in select-none">
+          <div className="max-w-xl w-full bg-slate-900/95 border-2 border-red-500/80 rounded-3xl p-6 sm:p-8 shadow-[0_0_80px_rgba(239,68,68,0.4)] flex flex-col items-center text-center relative overflow-hidden">
+            {/* Top Security Banner */}
+            <div className="absolute top-0 inset-x-0 bg-red-600/20 border-b border-red-500/30 px-4 py-2 flex items-center justify-between text-xs font-mono font-bold text-red-300">
+              <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5 text-red-400" /> PROCTOR LOCK ACTIVE</span>
+              <span>EXAM ACCESS SUSPENDED</span>
+            </div>
+
+            <div className="mt-4 mb-4 relative">
+              <div className="w-20 h-20 rounded-3xl bg-red-500/20 border-2 border-red-500 flex items-center justify-center shadow-lg shadow-red-500/30 animate-pulse">
+                <Users className="w-10 h-10 text-red-500" />
+              </div>
+              <div className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-md uppercase tracking-wider">
+                Blocked
+              </div>
+            </div>
+
+            <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight mb-2">
+              Multiple Faces Detected
+            </h2>
+
+            <div className="inline-flex items-center gap-2 bg-red-500/20 border border-red-500/40 text-red-300 px-4 py-1.5 rounded-full text-xs font-bold mb-4">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+              <span>{detectedFacesCount > 1 ? `${detectedFacesCount} Individuals Detected in Camera View` : 'Multiple individuals detected in camera view'}</span>
+            </div>
+
+            <p className="text-slate-300 text-sm leading-relaxed mb-4 max-w-md">
+              Your exam questions, answer options, and code editor have been <strong className="text-white">locked and blocked</strong> to ensure integrity. The exam cannot continue while another person is in view.
+            </p>
+
+            {/* Evidence snapshot thumbnail */}
+            {multipleFacesSnapshot && (
+              <div className="w-full max-w-xs mb-4 rounded-2xl overflow-hidden border border-red-500/30 shadow-inner bg-black/40">
+                <div className="bg-red-950/80 px-3 py-1 text-[10px] font-mono text-red-300 flex items-center justify-between">
+                  <span>VIOLATION SNAPSHOT</span>
+                  <span className="text-red-400">RECORDED</span>
+                </div>
+                <img src={multipleFacesSnapshot} alt="Violation Frame Evidence" className="w-full h-28 object-cover" />
+              </div>
+            )}
+
+            {/* Action Steps */}
+            <div className="w-full bg-slate-950/70 border border-slate-800 rounded-2xl p-4 mb-5 text-left text-xs text-slate-300 space-y-2">
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 font-bold flex items-center justify-center shrink-0 text-xs">1</span>
+                <span>Ask the other individual to <strong>step completely away from the webcam</strong>.</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 font-bold flex items-center justify-center shrink-0 text-xs">2</span>
+                <span>Sit centered facing the screen so <strong>only your verified face</strong> is in view.</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 font-bold flex items-center justify-center shrink-0 text-xs">3</span>
+                <span>The security system will auto-verify a clean feed and unlock your screen.</span>
+              </div>
+            </div>
+
+            {/* Dynamic Status / Resolution Indicator */}
+            {cleanStreakSeconds > 0 ? (
+              <div className="w-full bg-emerald-950/70 border border-emerald-500/50 rounded-2xl p-3.5 flex items-center justify-center gap-3 text-emerald-300 font-bold text-sm animate-pulse">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span>Single candidate verified! Unlocking exam in {Math.max(1, 3 - cleanStreakSeconds)}s...</span>
+              </div>
+            ) : (
+              <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 bg-red-950/40 border border-red-500/20 p-3 rounded-2xl">
+                <div className="flex items-center gap-2 text-xs text-red-400 font-mono">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                  <span>Extra individual currently in frame. Waiting...</span>
+                </div>
+                <div className="text-xs text-slate-400 font-bold">
+                  Screen locked
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {isExamBlocked && (
-        <div className="fixed inset-0 z-[70] bg-red-950/95 backdrop-blur-md flex flex-col items-center justify-center p-8 animate-fade-in">
+        <div className="fixed inset-0 z-[90] bg-red-950/95 backdrop-blur-md flex flex-col items-center justify-center p-8 animate-fade-in select-none">
             <div className="bg-red-500/20 p-6 rounded-full mb-6 ring-8 ring-red-500/10">
                 <AlertTriangle className="w-16 h-16 text-red-500 animate-pulse" />
             </div>
             <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-wide text-center">
-                {blockReason === 'absence' ? 'Exam Terminated' : 'Exam Blocked'}
+                {blockReason === 'absence' ? 'Exam Terminated' : blockReason === 'multiple_people' ? 'Exam Terminated — Security Breach' : 'Exam Blocked'}
             </h2>
             <p className="text-red-200 text-lg max-w-lg text-center mb-6 font-bold">
                 {blockReason === 'absence' 
                     ? 'Persistent candidate absence detected. Academic integrity verification failed.'
-                    : `Maximum violations reached (${maxViolations}/{maxViolations}). The secure environment has been compromised.`
+                    : blockReason === 'multiple_people'
+                    ? 'Persistent presence of multiple unauthorized individuals detected in assessment environment.'
+                    : `Maximum violations reached (${maxViolations}/${maxViolations}). The secure environment has been compromised.`
                 }
             </p>
             <div className="bg-red-900/50 border border-red-500/30 rounded-xl p-4 flex items-center gap-3">
@@ -881,7 +1022,7 @@ export const LiveExamScreen: React.FC<LiveExamScreenProps> = ({ onNavigate }) =>
         </div>
       )}
 
-      {isLocked && !isExamBlocked && (
+      {isLocked && !isExamBlocked && !isMultipleFacesBlocked && (
         <div className="fixed inset-0 z-[60] bg-slate-900/95 backdrop-blur-sm flex flex-col items-center justify-center p-8 animate-fade-in">
             <div className="bg-red-500/20 p-6 rounded-full mb-6 ring-8 ring-red-500/10">
                 <AlertTriangle className="w-12 h-12 text-red-500" />
